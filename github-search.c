@@ -1,5 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
+#include <curl/curl.h>
 #include "parson.h"
 
 #define next_argument() (argc--, argv++)
@@ -8,6 +10,11 @@
 struct _args {
     char *keyword;
     int limit;
+};
+
+struct _curl_data {
+    char *buffer;
+    size_t length;
 };
 
 int parse_args(int argc, char **argv, struct _args *args) {
@@ -21,7 +28,7 @@ int parse_args(int argc, char **argv, struct _args *args) {
 	case 'n': {
 	    next_argument();
 	    if (argc == 0) {
-	        printf("limit count required for -n option!\n");
+	        fprintf(stderr, "limit count required for -n option!\n");
 		return 1;
 	    }
 	    args->limit = atoi(argv[0]);
@@ -31,7 +38,7 @@ int parse_args(int argc, char **argv, struct _args *args) {
     }
 
     if (argc == 0) {
-        printf("please specify keyword!\n\nusage:\n");
+        fprintf(stderr, "please specify keyword!\n\nusage:\n");
         return 1;
     }
 
@@ -45,28 +52,68 @@ void usage(void) {
     printf("-n  search count limit(default = 1).\n");
 }
 
-int main(int argc, char **argv) {
-    char curl_command[512];
-    char cleanup_command[256];
-    char output_filename[] = "search_result.json";
+void free_curl_data(struct _curl_data *curl_data) {
+    if (curl_data && curl_data->buffer) {
+        free((void *)curl_data->buffer);
+    }
+    free((void *)curl_data);
+}
 
+size_t on_curl_data(char *ptr, size_t size, size_t nmemb, void *userdata) {
+    struct _curl_data *curl_data = (struct _curl_data *) userdata;
+    size_t data_size = size * nmemb;
+    if (data_size == 0) {
+        return 0;
+    }
+    if (!curl_data) {
+        return data_size;
+    }
+    if (!curl_data->buffer) {
+        curl_data->buffer = (char *)malloc(data_size);
+    } else {
+        curl_data->buffer = (char *)realloc(curl_data->buffer, curl_data->length + data_size);
+    }
+    if (curl_data->buffer) {
+        memcpy(curl_data->buffer + curl_data->length, ptr, data_size);
+	curl_data->length += data_size;
+    }
+    return data_size;
+}
+
+const char *load_json(const char *url) {
+    struct _curl_data curl_data = { 0 };
+    CURL *curl = curl_easy_init();
+    curl_easy_setopt(curl, CURLOPT_URL, url);
+    curl_easy_setopt(curl, CURLOPT_WRITEDATA, &curl_data);
+    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, on_curl_data);
+    curl_easy_perform(curl);
+    curl_easy_cleanup(curl);
+
+    char *json = (char *) malloc(curl_data.length + 1);
+    memcpy(json, curl_data.buffer, curl_data.length);
+    json[curl_data.length] = '\0';
+    return json;
+}
+
+int main(int argc, char **argv) {
+    char endpoint[512];
     struct _args args;
 
     if (parse_args(argc, argv, &args) != 0) {
         usage();
 	return 1;
     }
-    
-    sprintf(curl_command,
-   	  "curl -s \"https://api.github.com/legacy/repos/search/%s\" > %s",
-   	  args.keyword, output_filename);
-    sprintf(cleanup_command, "rm -f %s", output_filename);
-    system(curl_command);
 
-    JSON_Value *root_value = json_parse_file(output_filename);
+    sprintf(endpoint,
+   	  "https://api.github.com/legacy/repos/search/%s",
+	  args.keyword);
+
+    const char *json = load_json(endpoint);
+
+    JSON_Value *root_value = json_parse_string(json);
     if (json_value_get_type(root_value) != JSONObject) {
         json_value_free(root_value);
-        system(cleanup_command);
+	free((void*)json);
         return 1;
     }
 
@@ -83,8 +130,9 @@ int main(int argc, char **argv) {
 	       json_object_get_string(repo, "description")
 	       );
     }
-    
+
     json_value_free(root_value);
-    system(cleanup_command);
+    free((void*)json);
+    
     return 0;
 }

@@ -1,5 +1,5 @@
 github-search: parson.o github-search.o
-	gcc -o github-search github-search.o parson.o
+	gcc -o github-search github-search.o parson.o -lcurl
 
 
 parson.o: parson/parson.c
