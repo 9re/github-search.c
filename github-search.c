@@ -24,17 +24,17 @@ int parse_args(int argc, char **argv, struct _args *args) {
     for (next_argument(); argc > 0; next_argument()) {
         if (argv[0][0] != '-') break;
 
-	switch(argv[0][1]) {
-	case 'n': {
-	    next_argument();
-	    if (argc == 0) {
-	        fprintf(stderr, "limit count required for -n option!\n");
-		return 1;
-	    }
-	    args->limit = atoi(argv[0]);
-	    break;
-	}
-	}
+        switch(argv[0][1]) {
+        case 'n': {
+            next_argument();
+            if (argc == 0) {
+                fprintf(stderr, "limit count required for -n option!\n");
+                return 1;
+            }
+            args->limit = atoi(argv[0]);
+            break;
+        }
+        }
     }
 
     if (argc == 0) {
@@ -75,7 +75,7 @@ size_t on_curl_data(char *ptr, size_t size, size_t nmemb, void *userdata) {
     }
     if (curl_data->buffer) {
         memcpy(curl_data->buffer + curl_data->length, ptr, data_size);
-	curl_data->length += data_size;
+        curl_data->length += data_size;
     }
     return data_size;
 }
@@ -103,19 +103,19 @@ int main(int argc, char **argv) {
 
     if (parse_args(argc, argv, &args) != 0) {
         usage();
-	return 1;
+        return 1;
     }
 
     sprintf(endpoint,
-   	  "https://api.github.com/legacy/repos/search/%s",
-	  args.keyword);
+          "https://api.github.com/legacy/repos/search/%s",
+          args.keyword);
 
     const char *json = load_json(endpoint);
 
     JSON_Value *root_value = json_parse_string(json);
     if (json_value_get_type(root_value) != JSONObject) {
         json_value_free(root_value);
-	free((void*)json);
+        free((void*)json);
         return 1;
     }
 
@@ -127,14 +127,15 @@ int main(int argc, char **argv) {
     }
     
     int count = min(json_array_get_count(results), args.limit);
+    
     for (int i = 0; i < count; ++i) {
         JSON_Object *repo = json_array_get_object(results, i);
-	const char *name = json_object_get_string(repo, "name");
-	printf("https://github.com/%s/%s.git\n%s\n\n",
-	       json_object_get_string(repo, "owner"),
-	       name,
-	       json_object_get_string(repo, "description")
-	       );
+        const char *name = json_object_get_string(repo, "name");
+        printf("https://github.com/%s/%s.git\n%s\n\n",
+               json_object_get_string(repo, "owner"),
+               name,
+               json_object_get_string(repo, "description")
+               );
     }
 
     json_value_free(root_value);
