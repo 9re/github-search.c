@@ -86,12 +86,14 @@ const char *load_json(const char *url) {
     curl_easy_setopt(curl, CURLOPT_URL, url);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &curl_data);
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, on_curl_data);
+    curl_easy_setopt(curl, CURLOPT_USERAGENT, "github-search.c");
     curl_easy_perform(curl);
     curl_easy_cleanup(curl);
 
     char *json = (char *) malloc(curl_data.length + 1);
     memcpy(json, curl_data.buffer, curl_data.length);
     json[curl_data.length] = '\0';
+    
     return json;
 }
 
@@ -120,6 +122,10 @@ int main(int argc, char **argv) {
     JSON_Object *obj = json_value_get_object(root_value);
     JSON_Array *results = json_object_get_array(obj, "repositories");
 
+    if (!results) {
+        fprintf(stderr, "error:\n %s\n", json);
+    }
+    
     int count = min(json_array_get_count(results), args.limit);
     for (int i = 0; i < count; ++i) {
         JSON_Object *repo = json_array_get_object(results, i);
